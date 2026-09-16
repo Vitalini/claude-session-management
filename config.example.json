@@ -14,7 +14,7 @@
     "task": "look at the task {url}",
     "updates": "check what changed on {url}"
   },
-  "tabRule": "",
+  "tabRule": "First, once you have read the ticket, rename this terminal tab so the session is identifiable at a glance. Title format:\n\n[<TICKET-KEY>][<Client or project>] - <Shortened ticket title>\n\n- <Client or project>: the short brand/project name from the ticket, not the full legal or site name.\n- <Shortened ticket title>: 2–4 words in the ticket's own vocabulary; drop the client name (already in the title), articles and filler.\n- Keep the whole title under ~40 characters — tabs are narrow and clip the end. Cut words from the title, never the key.\n- Example: [PROJ-123][Nuts.com] - Auto-apply coupon\n\nRun this block as one unit:\n\nTITLE=\"<title>\"\nCALLER_TAB=$(cmux identify 2>/dev/null | python3 -c \"import json,sys; print(json.load(sys.stdin)['caller']['tab_ref'])\")\n[ -n \"$CALLER_TAB\" ] && cmux rename-tab --tab \"$CALLER_TAB\" \"$TITLE\"",
   "cmuxBin": "",
   "claudeFlags": "",
   "defaultWorkspace": "",
