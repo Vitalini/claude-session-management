@@ -1,0 +1,30 @@
+{
+  "port": 3737,
+  "language": "en",
+  "jira": {
+    "baseUrl": "",
+    "relevantJql": "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
+    "maxRelevant": 10
+  },
+  "phrases": {
+    "scoping": "look at the scoping {url}",
+    "task": "look at the task {url}",
+    "updates": "check what changed on {url}"
+  },
+  "cmuxBin": "",
+  "claudeFlags": "",
+  "defaultWorkspace": "",
+  "scopingWorkspace": "",
+  "claudeProjectsDir": "~/.claude/projects",
+  "watchdog": {
+    "enabled": true,
+    "intervalSec": 60,
+    "warnAtPercent": 85,
+    "nudge": "Continue from where you left off.",
+    "notifyKinds": [
+      "limit",
+      "crash",
+      "warning"
+    ]
+  }
+}

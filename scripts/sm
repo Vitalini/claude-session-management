@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# sm — session management quick commands (cmux + Claude Code).
+#
+#   sm PROJ-123        resume the session for a ticket IN THE CURRENT tab
+#                      (no session yet → starts claude with the ticket kickoff phrase)
+#   sm <text>          same, but searching titles/summaries
+#   sm -n <query>      open in a NEW cmux tab in the right workspace
+#   sm -l [query]      list/search sessions in the terminal
+#   sm -s              sync: reindex sessions and live tabs
+#   sm -d              open the dashboard in a browser
+#   sm -h              this help
+#   sm                 = sm -d
+set -euo pipefail
+
+# Project root: follow the symlink this script was invoked through, so ~/.local/bin/sm
+# works no matter where the repo was cloned. SM_ROOT still wins if it is set.
+self="${BASH_SOURCE[0]}"
+while [ -L "$self" ]; do
+  target="$(readlink "$self")"
+  case "$target" in /*) self="$target" ;; *) self="$(dirname "$self")/$target" ;; esac
+done
+SM_ROOT="${SM_ROOT:-$(cd "$(dirname "$self")/.." && pwd)}"
+RESOLVE="$SM_ROOT/scripts/sm-resolve.mjs"
+
+usage() { grep '^#   ' "$0" | sed 's/^#   //'; }
+
+verb="${1:-}"
+case "$verb" in
+  -h|--help) usage; exit 0 ;;
+  -s|--sync) exec node "$SM_ROOT/scripts/index-sessions.mjs" ;;
+  -l|--list) shift; exec node "$RESOLVE" --list "$@" ;;
+  -n|--new) shift; exec node "$RESOLVE" --new "$@" ;;
+esac
+
+# Port and default claude flags come from config.json (via the resolver).
+SM_PORT=3737
+SM_CLAUDE_FLAGS_DEFAULT=""
+eval "$(node "$RESOLVE" --config 2>/dev/null || true)"
+
+case "$verb" in
+  -d|"") open "http://localhost:$SM_PORT"; exit 0 ;;
+  -*) echo "sm: unknown option $verb" >&2; usage; exit 2 ;;
+esac
+
+# Default: resolve query and act in the CURRENT terminal.
+CLAUDE_FLAGS="${SM_CLAUDE_FLAGS:-$SM_CLAUDE_FLAGS_DEFAULT}"
+plan="$(node "$RESOLVE" "$@")" || exit $?
+action="${plan%%$'\t'*}"
+rest="${plan#*$'\t'}"
+case "$action" in
+  RESUME)
+    dir="${rest%%$'\t'*}"
+    rest="${rest#*$'\t'}"
+    sid="${rest%%$'\t'*}"
+    prompt="${rest#*$'\t'}"
+    [ "$prompt" = "$sid" ] && prompt=""
+    cd "$dir"
+    if [ -n "$prompt" ]; then
+      exec claude $CLAUDE_FLAGS --resume "$sid" "$prompt"
+    else
+      exec claude $CLAUDE_FLAGS --resume "$sid"
+    fi
+    ;;
+  FOCUSED)
+    ws="${rest%%$'\t'*}"
+    title="${rest#*$'\t'}"
+    echo "Session is already open in $ws — switched to it: $title"
+    exit 0
+    ;;
+  PROMPT)
+    exec claude $CLAUDE_FLAGS "$rest"
+    ;;
+  *)
+    echo "sm: unexpected resolver output: $plan" >&2; exit 1 ;;
+esac
