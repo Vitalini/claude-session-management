@@ -39,6 +39,7 @@ export function openTab({ workspaceName, cwd, command, title, focus = true }) {
   const name = workspaceName || CONFIG.defaultWorkspace || FALLBACK_WORKSPACE;
   const ws = listWorkspaces().find((w) => w.name.toLowerCase() === name.toLowerCase());
   const full = `cd ${shq(cwd)} && ${command}`;
+  if (full.includes("\n")) throw new Error("openTab: command must be a single line (a newline would submit it early)");
   let wsRef, surfRef;
   if (!ws) {
     wsRef = cmux("new-workspace", "--name", name, "--cwd", cwd, "--command", command,

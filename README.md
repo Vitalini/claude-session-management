@@ -109,6 +109,7 @@ If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw
 | `phrases.scoping` | First message for a new scoping-ticket session; `{url}` is the ticket |
 | `phrases.task` | First message for a new ticket session |
 | `phrases.updates` | First message when an existing ticket session is resumed |
+| `tabRule` | Appended to the first message of a *new* ticket session, telling it how to name its cmux tab (`[KEY][Client] - short title`). The tab title is what search and the dashboard key off later, so an unnamed tab is a session you will not find. Set by the installer from the chosen language; empty disables it |
 | `cmuxBin` | Path to the cmux CLI; empty means auto-detect |
 | `claudeFlags` | Extra flags passed to `claude` (e.g. `--dangerously-skip-permissions` — opt-in, empty by default) |
 | `defaultWorkspace` | cmux workspace for new session tabs; empty creates one named `Sessions` |

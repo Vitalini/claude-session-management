@@ -337,6 +337,9 @@ const config = {
     projectKeys: ticketKeys,
   },
   phrases: { ...preset.phrases },
+  // Appended to the kickoff phrase of a brand-new ticket session so it names its
+  // own tab — the tab title is what search and the dashboard key off later.
+  tabRule: preset.tabRule ?? "",
   cmuxBin: cmuxBin ?? "",
   claudeFlags,
   defaultWorkspace: workspace,

@@ -7,6 +7,9 @@
 //   node sm-resolve.mjs --list "<query>"   → print a table of matches
 //   node sm-resolve.mjs --config           → shell assignments (port, claude flags) for the `sm` wrapper
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { searchSessions, getSession, CONFIG } from "./db.mjs";
 import { ticketsEnabled, ticketBaseUrl, bareKeyExact, ticketUrl, keyFromUrl } from "./tickets.mjs";
 import { resumeSessionTab, openTab, focusTab } from "./cmux-lib.mjs";
@@ -136,15 +139,27 @@ if (!ticketKey) {
 }
 
 const { phrase, scoping } = await ticketPlan(ticketKey);
+// A brand-new session gets the tab-naming rule too: the tab title is what the
+// index, the dashboard and `sm` search on later, and an unnamed tab is lost work.
+const kickoff = CONFIG.tabRule ? `${phrase}\n\n${CONFIG.tabRule}` : phrase;
+
 if (mode === "new") {
+  // The command cmux types into the tab must stay on ONE line — a newline would
+  // submit it half-written — so a multi-line kickoff travels via a temp file.
+  let claudeArg = `'${kickoff.replace(/'/g, `'\\''`)}'`;
+  if (kickoff.includes("\n")) {
+    const file = path.join(os.tmpdir(), `sm-kickoff-${Date.now()}.txt`);
+    fs.writeFileSync(file, kickoff);
+    claudeArg = `"$(cat '${file.replace(/'/g, `'\\''`)}')"`;
+  }
   const r = openTab({
     workspaceName: scoping ? (CONFIG.scopingWorkspace || CONFIG.defaultWorkspace) : CONFIG.defaultWorkspace,
     cwd: process.env.HOME,
-    command: `claude ${CONFIG.claudeFlags} '${phrase.replace(/'/g, `'\\''`)}'`,
+    command: `claude ${CONFIG.claudeFlags} ${claudeArg}`,
     title: ticketKey,
     focus: true,
   });
   console.log(`OPENED\t${r.workspace}\t${r.surface ?? ""}`);
 } else {
-  console.log(`PROMPT\t${phrase}`);
+  console.log(`PROMPT\t${kickoff}`);
 }
