@@ -1,13 +1,15 @@
 ---
 name: session-management
-description: Save the current Claude session to cold storage and exit claude when a task is finished (the cmux tab stays open unless explicitly asked to close it), or find and restore a past session by ticket key or text. Use whenever the user says a task is done and wants to wrap up the session — "save session", "session management", "wrap up", "close the tab", "park this task", "сохрани сессию", "закрывай сессию", "заверши сессию", "збережи сесію", "закривай сесію" — or wants to find/restore an earlier session — "session management PROJ-123", "find the session", "restore the session", "where did I work on PROJ-123", "найди сессию", "восстанови сессию", "знайди сесію", "віднови сесію". Trigger generously at the end of any completed task: freeing RAM by closing tabs is the whole point, undertriggering leaves hot sessions eating memory.
+description: Save the current Claude session to cold storage and exit claude when a task is finished (the cmux tab stays open unless explicitly asked to close it), or find and restore a past session by ticket key or text. Use whenever the user says a task is done and wants to wrap up the session — "save session", "session management", "wrap up", "close the tab", "park this task", "сохрани сессию", "закрывай сессию", "заверши сессию", "збережи сесію", "закривай сесію" — or wants to find/restore an earlier session — "session management {{TICKET_EXAMPLE}}", "find the session", "restore the session", "where did I work on {{TICKET_EXAMPLE}}", "найди сессию", "восстанови сессию", "знайди сесію", "віднови сесію". Trigger generously at the end of any completed task: freeing RAM by closing tabs is the whole point, undertriggering leaves hot sessions eating memory.
 ---
 
 # Session Management
 
 Cold-store Claude sessions in SQLite so cmux tabs can be closed (freeing RAM) and reopened later with one command. Everything lives in `{{PROJECT_ROOT}}` (scripts, DB `data/sessions.db`, dashboard on http://localhost:{{PORT}}, CLI `sm`).
 
-Two modes. Pick by intent: wrapping up the current session → **Save** (saves and exits claude; the tab stays, closing it is a separate explicit ask); looking for a past session → **Restore** (by ticket key or name, never by session id).
+Two modes. Pick by intent: wrapping up the current session → **Save** (saves and exits claude; the tab stays, closing it is a separate explicit ask); looking for a past session → **Restore** (by name, or by ticket key if ticket tracking is configured — never by session id).
+
+Ticket tracking is optional. Everything below works on a plain name; anything ticket-specific is marked "if ticket tracking is configured".
 
 ## Save mode — "save session"
 
@@ -17,7 +19,7 @@ The user finished a task (usually a ticket) and wants this session parked. Defau
 
 2. **Write a summary.** Compose 2–5 sentences in {{LANG_NAME}} covering: what was done, key decisions/links (PR, ticket), and what remains. Also collect unfinished TODOs into a short list — they'll be shown when the session is restored. Be concrete: this text is the future search index and the "what was I doing here" refresher.
 
-3. **Pick a name.** 1–2 words, e.g. "Turing sample", "PROJ-123", "wallet passes". Never a session id, never a sentence. It is stored as the title and is what the user types into `sm "<name>"` to come back. If the work is a ticket, the key alone is the name.
+3. **Pick a name.** 1–2 words, e.g. "Turing sample", "wallet passes". Never a session id, never a sentence. It is stored as the title and is what the user types into `sm "<name>"` to come back. If ticket tracking is configured and the work is a ticket, the key alone ({{TICKET_EXAMPLE}}) is the name.
 
 4. **Save + exit** (the script identifies this cmux tab itself via `cmux identify`, extracts the session id from cmux's resume binding, stores everything, prints confirmation):
 
@@ -38,7 +40,7 @@ Shortcuts: `/sms` = save + exit (tab stays), `/smsc` = save + close tab.
 
 ## Restore mode — "find/restore session X"
 
-The user (often in a fresh session) wants to get back to earlier work, referenced by ticket key (PROJ-123) or free text.
+The user (often in a fresh session) wants to get back to earlier work, referenced by free text (the name it was saved under) or, if ticket tracking is configured, by ticket key ({{TICKET_EXAMPLE}}).
 
 1. **Search:**
    ```bash
@@ -50,15 +52,15 @@ The user (often in a fresh session) wants to get back to earlier work, reference
    ```bash
    node {{PROJECT_ROOT}}/scripts/sm-resolve.mjs --new "<query>"
    ```
-   This resumes the session in the correct folder and workspace and focuses cmux. The query can also be a full ticket URL — the key is extracted from it.
+   This resumes the session in the correct folder and workspace and focuses cmux. If ticket tracking is configured, the query can also be a full ticket URL — the key is extracted from it.
 
    If that session is already running, nothing is resumed: cmux switches to its existing tab and the command reports `FOCUSED`. Two claudes sharing one transcript would fight over it, so switching is the only sane answer — tell the user which tab they were taken to.
 
-   Every path hands the session a kickoff phrase from `config.json → phrases`: a resumed ticket session is asked to check what changed on the ticket, and when no session exists yet, a fresh claude is pointed at the ticket (the scoping phrase for scoping tickets, the plain one otherwise). That's intended behavior, not a failure.
+   If ticket tracking is configured, every path hands the session a kickoff phrase from `config.json → phrases`: a resumed ticket session is asked to check what changed on the ticket, and when no session exists yet, a fresh claude is pointed at the ticket (the scoping phrase for scoping tickets, the plain one otherwise). That's intended behavior, not a failure. A session saved under a plain name just resumes.
 
-3. Mention the shell shortcut for next time: `sm PROJ-123` or `sm "<name>"` does the same from any terminal (in-place), `sm -n …` opens a new tab, `sm` alone opens the dashboard. Never suggest restoring by raw session id.
+3. Mention the shell shortcut for next time: `sm "<name>"` (or `sm {{TICKET_EXAMPLE}}` when ticket tracking is configured) does the same from any terminal (in-place), `sm -n …` opens a new tab, `sm` alone opens the dashboard. Never suggest restoring by raw session id.
 
 ## Maintenance
 
 - `sm -s` (or `node scripts/index-sessions.mjs`) — resync DB with reality: backfill new transcripts from `~/.claude/projects`, mark live cmux tabs active, demote closed ones to saved. Suggest it if search results look stale.
-- The dashboard (http://localhost:{{PORT}}) shows live tabs, saved sessions and search over everything stored, with one-click resume. With a Jira base URL in `config.json` it also lists relevant tickets.
+- The dashboard (http://localhost:{{PORT}}) shows live tabs, saved sessions and search over everything stored, with one-click resume. With a tracker base URL in `config.json → tickets` it also links ticket keys and flags sessions whose ticket is closed.

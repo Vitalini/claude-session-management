@@ -12,11 +12,11 @@ Use the `sessions` skill for every request here; it holds the full command refer
 
 What they ask for, and what you do:
 
-- "what do I have on X" — search the index (`sm-resolve.mjs --list`) and answer in prose: what those sessions are about, which is freshest, whether any is live. Don't paste raw tables into a phone.
+- "what do I have on X" — search the index (`sm-resolve.mjs --list`) by name, or by ticket key if ticket tracking is configured, and answer in prose: what those sessions are about, which is freshest, whether any is live. Don't paste raw tables into a phone.
 - "what's running" — `GET localhost:{{PORT}}/api/active`: sessions with a live claude, plus tabs that are open but dead and can be woken.
 - "what fell over" — `GET localhost:{{PORT}}/api/incidents`. Each pending incident carries an analysis of what that session was doing and what was left unfinished. Relay that analysis; it's the reason the alert exists.
 - "ask the billing session what's with the PR" — `say.mjs` types the question into that live session and returns its actual reply. This is the main way to check on work from the phone.
-- "resume PROJ-123 / restore that session" — brings it back in its own folder and workspace.
+- "resume {{TICKET_EXAMPLE}} / restore that session" — brings it back in its own folder and workspace. A session saved under a plain name is resumed the same way, by that name.
 - "hibernate this one / park everything idle" — saves the session to the index and closes the tab, freeing memory.
 
 Three things to hold onto:

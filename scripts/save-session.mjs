@@ -96,12 +96,13 @@ upsertSession({
 console.log(`✔ Session saved: ${sessionId}`);
 console.log(`  Title: ${name ?? title ?? "(untitled)"}`);
 console.log(`  Folder: ${cwd}`);
-console.log(`  Workspace: ${wsName ?? "-"}${fromTitle.jira_key ? `  Jira: ${fromTitle.jira_key}` : ""}`);
-// Restore hint: Jira key, else the human name/title (FTS finds it), never a raw id
-// unless there is nothing else to search by.
+console.log(`  Workspace: ${wsName ?? "-"}${fromTitle.jira_key ? `  Ticket: ${fromTitle.jira_key}` : ""}`);
+// Restore hint: the ticket key when there is one, else the human name/title (FTS
+// finds it), never a raw id unless there is nothing else to search by. A session
+// with no ticket is found by its name — ticket tracking is optional.
 const handle = fromTitle.jira_key ?? name ?? title;
 console.log(`  Come back with: sm ${handle ? (fromTitle.jira_key ? handle : JSON.stringify(handle)) : sessionId}`);
-if (!handle) console.log("  (no Jira key or --name given — only the session id can find this one; pass --name next time)");
+if (!handle) console.log("  (no ticket key or --name given — only the session id can find this one; pass --name next time)");
 
 // 3a. Exit the session, keep the tab.
 if (doExit) {

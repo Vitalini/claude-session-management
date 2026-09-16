@@ -1,8 +1,16 @@
 export const DB_PATH: string;
+export const CONFIG_PATH: string;
 export const CONFIG: {
   port: number;
   language: string;
-  jira: { baseUrl: string; relevantJql: string; maxRelevant: number };
+  tickets: {
+    enabled: boolean;
+    baseUrl: string;
+    browsePath: string;
+    projectKeys: string[];
+    relevantJql: string;
+    maxRelevant: number;
+  };
   phrases: { scoping: string; task: string; updates: string };
   cmuxBin: string;
   claudeFlags: string;

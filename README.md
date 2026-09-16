@@ -9,7 +9,7 @@ A local control room for the Claude Code sessions you run in [cmux](https://cmux
 - macOS
 - [cmux](https://cmux.sh) — the terminal this drives (tabs, workspaces, `cmux` CLI)
 - [Claude Code](https://claude.com/claude-code) (`claude` on PATH)
-- Node.js 20+
+- Node.js 22+ (better-sqlite3 v13 requires it)
 
 ## Install with Claude Code
 
@@ -19,7 +19,7 @@ Paste this into Claude Code:
 Install https://github.com/Vitalini/claude-session-management — follow its INSTALL.md
 ```
 
-It clones the repo, checks the prerequisites, asks three questions (language, Jira URL, run at login) and runs the installer.
+It clones the repo, checks the prerequisites, asks the wizard's questions itself (language, ticket tracking, workspaces, port, services) and runs the installer with the answers.
 
 ## Manual install
 
@@ -29,24 +29,26 @@ cd ~/claude-session-management
 node scripts/setup.mjs
 ```
 
-The installer writes `config.json`, links `sm` into `~/.local/bin`, installs the `/sm`, `/sms`, `/smsc` commands and the `session-management` skill into `~/.claude/`, registers the dashboard and watchdog as launchd services, then builds the app and indexes your existing sessions. It is idempotent — re-run it after `git pull`.
+An interactive wizard asks for the language, whether to track tickets and where, your project key prefixes, cmux workspaces, the dashboard port, extra `claude` flags, whether to start at login and an optional Telegram bot token — each with a default you accept with Enter — shows the answers back and asks before writing anything. Then it writes `config.json`, links `sm` into `~/.local/bin`, installs the `/sm`, `/sms`, `/smsc` commands and the `session-management` skill into `~/.claude/`, registers the dashboard and watchdog as launchd services, builds the app and indexes your existing sessions. It is idempotent — re-run it after `git pull`, and it pre-fills the answers you already use.
 
 Non-interactive:
 
 ```bash
-node scripts/setup.mjs --yes --lang en --jira-url https://jira.example.com
+node scripts/setup.mjs --yes --lang en --tickets-url https://acme.example.com --ticket-keys PROJ,OPS
 ```
 
-Flags: `--lang en|ru|uk`, `--jira-url`, `--port`, `--workspace`, `--scoping-workspace`, `--claude-flags`, `--no-launchd`, `--yes`, `--dry-run`.
+Flags: `--lang en|ru|uk`, `--tickets-url`, `--ticket-keys`, `--no-tickets`, `--port`, `--workspace`, `--scoping-workspace`, `--claude-flags`, `--telegram-token`, `--no-launchd`, `--yes`, `--dry-run`.
 
 ## Usage
+
+Ticket tracking is optional. Sessions are saved, searched and resumed by name with no tracker configured at all; turn it on and a session can also carry a ticket key, which becomes a link and a kickoff phrase. Which prefixes count as a ticket is configuration (`tickets.projectKeys`), not an assumption — set `["PROJ","OPS"]` and a stray `ABC-12` in a summary is just text.
 
 ### `sm` CLI
 
 | Command | What it does |
 |---|---|
-| `sm PROJ-123` | Resume that ticket's session in the current terminal; with no session yet, start claude pointed at the ticket |
-| `sm "<text>"` | Same, matching titles, summaries, clients and folders |
+| `sm "<name>"` | Resume the session saved under that name in the current terminal; also matches titles, summaries, clients and folders |
+| `sm PROJ-123` | Same by ticket key (when ticket tracking is on); with no session yet, start claude pointed at the ticket |
 | `sm -n <query>` | Open it in a new cmux tab, in its own folder and workspace |
 | `sm -l [query]` | List/search sessions as a table |
 | `sm -s` | Resync the index with reality (transcripts + live tabs) |
@@ -63,7 +65,7 @@ The `session-management` skill does the same thing from plain language ("save se
 
 ### Dashboard
 
-http://localhost:3737 — live cmux tabs, saved and historical sessions, search, one-click resume and hibernate. With a Jira base URL configured it also lists your open tickets and flags sessions whose ticket is already closed.
+http://localhost:3737 — live cmux tabs, saved and historical sessions, search, one-click resume and hibernate. With ticket tracking configured it also links ticket keys and flags sessions whose ticket is already closed.
 
 ### Watchdog and Telegram
 
@@ -88,7 +90,7 @@ The message is typed into that session's tab; the reply is read from its transcr
 
 ### OpenClaw (optional)
 
-If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw/SKILL.md` gives it a `sessions` skill so you can search, inspect and resume sessions from Telegram chat, and `templates/openclaw/group-prompt.md` is a system prompt for a dedicated group. Render `{{PROJECT_ROOT}}` and `{{PORT}}` yourself and fill in your own group and user ids. Nothing else in the tool depends on it.
+If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw/SKILL.md` gives it a `sessions` skill so you can search, inspect and resume sessions from Telegram chat, and `templates/openclaw/group-prompt.md` is a system prompt for a dedicated group. Render `{{PROJECT_ROOT}}`, `{{PORT}}` and `{{TICKET_EXAMPLE}}` yourself and fill in your own group and user ids. Nothing else in the tool depends on it.
 
 ## Configuration
 
@@ -98,9 +100,12 @@ If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw
 |---|---|
 | `port` | Dashboard port (default 3737) |
 | `language` | `en`, `ru` or `uk` — picks the kickoff phrases and the watchdog nudge |
-| `jira.baseUrl` | Jira site URL; empty turns every Jira feature off and kickoff phrases use the bare ticket key |
-| `jira.relevantJql` | JQL for the dashboard's ticket list |
-| `jira.maxRelevant` | How many tickets that list shows |
+| `tickets.enabled` | Ticket tracking on/off. Off (or an empty `baseUrl`) means no ticket links, no tracker calls, no ticket UI — sessions are saved and found by name |
+| `tickets.baseUrl` | Tracker site URL, e.g. `https://acme.example.com`; empty turns ticket features off and kickoff phrases use the bare key |
+| `tickets.browsePath` | Path between the base URL and the key (`/browse/`) |
+| `tickets.projectKeys` | Which prefixes count as a ticket, e.g. `["PROJ","OPS"]`. Empty matches any `KEY-123` shaped token |
+| `tickets.relevantJql` | Query for the dashboard's ticket list (Jira-compatible trackers) |
+| `tickets.maxRelevant` | How many tickets that list shows |
 | `phrases.scoping` | First message for a new scoping-ticket session; `{url}` is the ticket |
 | `phrases.task` | First message for a new ticket session |
 | `phrases.updates` | First message when an existing ticket session is resumed |
@@ -115,7 +120,7 @@ If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw
 | `watchdog.nudge` | Message typed into a session after it is resumed |
 | `watchdog.notifyKinds` | Which incidents alert you: `limit`, `crash`, `warning` |
 
-Secrets live in `.env.local` (never committed): `JIRA_EMAIL`, `JIRA_API_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+Secrets live in `.env.local` (never committed): `TICKET_EMAIL`, `TICKET_API_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`. `SM_CONFIG` points the scripts at a different config file when you want to try settings without touching your own.
 
 ## Uninstall
 
@@ -128,5 +133,5 @@ Removes the `sm` symlink, the slash commands, the skill and the launchd services
 ## How it works
 
 - **cmux CLI** is the hand on the terminal: it lists workspaces and tabs, opens and closes them, types into them, and reads their screens — that is how sessions get resumed, hibernated and watched.
-- **Transcripts in `~/.claude/projects`** are the source of truth for what a session was: the indexer walks the `.jsonl` files for cwd, git branch, first and last prompt, ticket keys and PR links.
+- **Transcripts in `~/.claude/projects`** are the source of truth for what a session was: the indexer walks the `.jsonl` files for cwd, git branch, first and last prompt, ticket keys (the shape comes from `tickets.projectKeys`, never assumed) and PR links.
 - **SQLite + FTS5** (`data/sessions.db`) holds the index, the saved summaries and the watchdog's incidents, which is what makes "the session about the wallet passes" findable months later.

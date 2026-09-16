@@ -9,10 +9,12 @@ import os from "node:os";
 import readline from "node:readline";
 import { execFileSync } from "node:child_process";
 import { getDb, upsertSession, statusCounts, parseTabTitle, searchSessions, CONFIG } from "./db.mjs";
+import { ticketKeyRe } from "./tickets.mjs";
 import { cmux, claudeProcessesBySurface } from "./cmux-lib.mjs";
 
 const PROJECTS_DIR = CONFIG.claudeProjectsDir.replace(/^~/, os.homedir());
-const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]{1,9}-\d{2,6}\b/g;
+// Which prefixes count as a ticket comes from config.json → tickets.projectKeys.
+const TICKET_KEY_RE = ticketKeyRe("g");
 
 // ---------- Backfill from jsonl transcripts ----------
 
@@ -25,10 +27,10 @@ async function indexJsonl(file, stat) {
   const isPlumbing = (t) =>
     /^(Base directory for this skill|Caveat:|Last login:|\[SYSTEM|<command-|<local-command|<user-prompt|<system-reminder)/i.test(t.trim());
   let userCount = 0;
-  const jiraHits = new Map();
+  const ticketHits = new Map();
 
   const noteKeys = (s) => {
-    for (const k of String(s).matchAll(JIRA_KEY_RE)) jiraHits.set(k[0], (jiraHits.get(k[0]) ?? 0) + 1);
+    for (const k of String(s).matchAll(TICKET_KEY_RE)) ticketHits.set(k[0], (ticketHits.get(k[0]) ?? 0) + 1);
   };
 
   for await (const line of rl) {
@@ -60,7 +62,7 @@ async function indexJsonl(file, stat) {
     }
   }
 
-  // Sessions opened by `sm` start with a kickoff phrase plus a Jira link, which
+  // Sessions opened by `sm` start with a kickoff phrase plus a ticket link, which
   // says nothing about the work. Show the first message that actually does.
   const opener = openers.find((t) => {
     const meat = t.replace(/https?:\/\/\S+/g, "").replace(/\[Image #\d+\]/g, "").trim();
@@ -69,7 +71,7 @@ async function indexJsonl(file, stat) {
 
   const title = aiTitle || firstUserText || path.basename(cwd ?? "");
   const fromTitle = parseTabTitle(title);
-  const topHit = [...jiraHits.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topHit = [...ticketHits.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   upsertSession({
     session_id: sessionId,
     cwd, title,
@@ -245,7 +247,7 @@ export function liveScan() {
       dbSession = { session_id: bindingId, cwd: bindingCwd ?? null };
     } else {
       // Dead tab, no binding: match the leftover title against the DB —
-      // by Jira key first, then via the tab's recorded working directory.
+      // by ticket key first, then via the tab's recorded working directory.
       const key = parseTabTitle(tabTitle).jira_key;
       if (key) {
         const hit = searchSessions(key, { limit: 1 })[0];

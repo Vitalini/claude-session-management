@@ -8,6 +8,7 @@
 //   node sm-resolve.mjs --config           → shell assignments (port, claude flags) for the `sm` wrapper
 
 import { searchSessions, getSession, CONFIG } from "./db.mjs";
+import { ticketsEnabled, ticketBaseUrl, bareKeyExact, ticketUrl, keyFromUrl } from "./tickets.mjs";
 import { resumeSessionTab, openTab, focusTab } from "./cmux-lib.mjs";
 import { liveScan } from "./index-sessions.mjs";
 
@@ -24,18 +25,13 @@ if (mode === "config") {
   process.exit(0);
 }
 
-// Jira is optional: with no base URL the phrases get the bare key instead of a link.
-const JIRA_BASE = (CONFIG.jira?.baseUrl ?? "").replace(/\/+$/, "");
-const ticketRef = (key) => (JIRA_BASE ? `${JIRA_BASE}/browse/${key}` : key);
+// Ticket tracking is optional: with it off the phrases get the bare key instead
+// of a link, and nothing ever calls the tracker.
+const ticketRef = (key) => ticketUrl(key) ?? key;
 
-// A pasted Jira link is just a key with decoration — treat them the same.
-function normalize(q) {
-  const fromUrl = q.match(/\/browse\/([A-Z][A-Z0-9]+-\d+)/i)?.[1]
-    ?? q.match(/[?&]selectedIssue=([A-Z][A-Z0-9]+-\d+)/i)?.[1];
-  return (fromUrl ?? q).trim();
-}
-const query = normalize(rawQuery);
-if (query !== rawQuery) info(`Jira link → ${query}`);
+// A pasted ticket link is just a key with decoration — treat them the same.
+const query = keyFromUrl(rawQuery) ?? rawQuery;
+if (query !== rawQuery) info(`Ticket link → ${query}`);
 
 function fmtRow(s) {
   const date = (s.updated_at ?? "").slice(0, 10);
@@ -44,13 +40,19 @@ function fmtRow(s) {
   return `${date}  ${st} ${key} ${(s.title ?? "").slice(0, 70)}`;
 }
 
-async function jiraIssue(key) {
-  const { JIRA_EMAIL, JIRA_API_TOKEN } = process.env;
-  if (!JIRA_BASE || !JIRA_EMAIL || !JIRA_API_TOKEN) return null;
-  const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64");
+// Optional enrichment for the typical case (a Jira-compatible tracker): read the
+// ticket so a scoping ticket gets the scoping phrase. Skipped entirely when
+// ticket tracking is off — no network call, no credentials needed.
+async function ticketIssue(key) {
+  if (!ticketsEnabled()) return null;
+  const email = process.env.TICKET_EMAIL ?? process.env.JIRA_EMAIL;
+  const token = process.env.TICKET_API_TOKEN ?? process.env.JIRA_API_TOKEN;
+  const base = ticketBaseUrl();
+  if (!base || !email || !token) return null;
+  const auth = Buffer.from(`${email}:${token}`).toString("base64");
   try {
     const res = await fetch(
-      `${JIRA_BASE}/rest/api/3/issue/${key}?fields=summary,labels,issuetype`,
+      `${base}/rest/api/3/issue/${key}?fields=summary,labels,issuetype`,
       { headers: { Authorization: `Basic ${auth}` } }
     );
     if (!res.ok) return null;
@@ -60,15 +62,15 @@ async function jiraIssue(key) {
 
 // Decide the phrase for a ticket with no saved session.
 async function ticketPlan(key) {
-  const issue = await jiraIssue(key);
+  const issue = await ticketIssue(key);
   let scoping = false;
   if (issue) {
     const summary = issue.fields?.summary ?? "";
     const labels = (issue.fields?.labels ?? []).join(" ");
     scoping = /scop/i.test(summary) || /scop/i.test(labels);
-    info(`Jira: ${key} — ${summary}${scoping ? "  [scoping]" : ""}`);
-  } else if (JIRA_BASE) {
-    info(`Jira: ${key} — could not read the ticket (no access/creds), using the default phrase`);
+    info(`Ticket: ${key} — ${summary}${scoping ? "  [scoping]" : ""}`);
+  } else if (ticketsEnabled()) {
+    info(`Ticket: ${key} — could not read it (no access/creds), using the default phrase`);
   }
   const phrase = (scoping ? CONFIG.phrases.scoping : CONFIG.phrases.task).replace("{url}", ticketRef(key));
   return { phrase, scoping };
@@ -82,14 +84,16 @@ if (mode === "list") {
 }
 
 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
-const jiraKey = query.toUpperCase().match(/^[A-Z][A-Z0-9]+-\d+$/)?.[0];
+// bareKeyExact, not ticketKeyExact: a bare PROJ-123 still earns a kickoff phrase
+// with tracking off — it just carries the key instead of a link.
+const ticketKey = bareKeyExact(query);
 const found = isUuid ? getSession(query.toLowerCase()) : searchSessions(query, { limit: 1 })[0];
 // A session that only mentions the ticket is not that ticket's session: resuming
 // it would drop you into unrelated work and tell it to check the wrong ticket.
 const mentionOnly = found?.match === "mention";
 const hit = mentionOnly ? null : found;
 if (mentionOnly) {
-  info(`No session for ${jiraKey} yet. It is only mentioned in "${found.title ?? found.session_id}" — not resuming that one.`);
+  info(`No session for ${ticketKey} yet. It is only mentioned in "${found.title ?? found.session_id}" — not resuming that one.`);
 }
 
 // A session that is already running gets switched to, never resumed again:
@@ -111,8 +115,9 @@ if (hit?.cwd) {
     process.exit(0);
   }
   // Resuming a ticket's session: hand it the ticket link so it re-reads what
-  // changed there while it was parked, instead of waking up mid-thought.
-  const key = jiraKey ?? hit.jira_key;
+  // changed there while it was parked, instead of waking up mid-thought. A
+  // session saved under a plain name has no ticket and simply resumes.
+  const key = ticketKey ?? hit.jira_key;
   const prompt = key ? CONFIG.phrases.updates.replace("{url}", ticketRef(key)) : "";
   if (prompt) info(`Kickoff: ${prompt}`);
   if (mode === "new") {
@@ -124,19 +129,19 @@ if (hit?.cwd) {
   process.exit(0);
 }
 
-if (!jiraKey) {
-  info(`No session matches "${query}" (and it is not a Jira key).`);
+if (!ticketKey) {
+  info(`No session matches "${query}" (and it is not a ticket key).`);
   info(`Try: sm -l "${query}" to see near matches.`);
   process.exit(1);
 }
 
-const { phrase, scoping } = await ticketPlan(jiraKey);
+const { phrase, scoping } = await ticketPlan(ticketKey);
 if (mode === "new") {
   const r = openTab({
     workspaceName: scoping ? (CONFIG.scopingWorkspace || CONFIG.defaultWorkspace) : CONFIG.defaultWorkspace,
     cwd: process.env.HOME,
     command: `claude ${CONFIG.claudeFlags} '${phrase.replace(/'/g, `'\\''`)}'`,
-    title: jiraKey,
+    title: ticketKey,
     focus: true,
   });
   console.log(`OPENED\t${r.workspace}\t${r.surface ?? ""}`);

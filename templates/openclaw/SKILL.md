@@ -15,11 +15,11 @@ Dashboard API: `http://localhost:{{PORT}}` — available while the Mac is awake.
 ## Answering "what do I have on X"
 
 ```bash
-node $SM/scripts/sm-resolve.mjs --list "PROJ-123"     # by ticket key
-node $SM/scripts/sm-resolve.mjs --list "billing"      # by text: title, client, folder
+node $SM/scripts/sm-resolve.mjs --list "billing"            # by text: name, title, client, folder
+node $SM/scripts/sm-resolve.mjs --list "{{TICKET_EXAMPLE}}"  # by ticket key, if ticket tracking is configured
 ```
 
-Output is one line per match: date, status, ticket key, title. Statuses mean:
+Output is one line per match: date, status, ticket key (empty when the session has none — ticket tracking is optional), title. Statuses mean:
 - `active` — a claude is running in a cmux tab right now
 - `saved` — deliberately hibernated (cold, resumable)
 - `historical` — found in the transcript archive, never explicitly parked
@@ -57,11 +57,11 @@ You can ask a *running* session a question and relay its answer — this is how 
 
 ```bash
 node $SM/scripts/say.mjs --list                             # which sessions can be talked to
-node $SM/scripts/say.mjs "PROJ-123" "what's the status?"    # ask, wait, print the reply
+node $SM/scripts/say.mjs "{{TICKET_EXAMPLE}}" "what's the status?"    # ask, wait, print the reply
 node $SM/scripts/say.mjs --wait 240 "billing" "finish the PR description"
 ```
 
-The target can be a session id, a ticket key, or a fragment of the tab title. The message is typed into that tab and the reply comes from the session's transcript, so you get its real answer rather than a screen scrape. It waits until the reply stops growing (default ~150s); pass `--wait` for long jobs and say it's still working if it times out.
+The target can be a session id, a fragment of the tab title, or a ticket key when ticket tracking is configured. The message is typed into that tab and the reply comes from the session's transcript, so you get its real answer rather than a screen scrape. It waits until the reply stops growing (default ~150s); pass `--wait` for long jobs and say it's still working if it times out.
 
 Only live sessions can be talked to. If it isn't running, offer to resume it first — don't resume silently, that costs quota.
 
@@ -72,10 +72,10 @@ Anything you send lands in a real working session and may change files or post t
 Resume a session in a new cmux tab, in its own folder and workspace (a ticket URL works as well as a key):
 
 ```bash
-node $SM/scripts/sm-resolve.mjs --new "PROJ-123"
+node $SM/scripts/sm-resolve.mjs --new "{{TICKET_EXAMPLE}}"
 ```
 
-If that session is already running, this switches cmux to its existing tab instead of starting a second copy, and prints `FOCUSED` — say so rather than reporting a resume. A resumed ticket session is also handed a kickoff phrase asking it to check what changed on the ticket while it was parked.
+If that session is already running, this switches cmux to its existing tab instead of starting a second copy, and prints `FOCUSED` — say so rather than reporting a resume. If ticket tracking is configured, a resumed ticket session is also handed a kickoff phrase asking it to check what changed on the ticket while it was parked.
 
 Act on a watchdog incident (id from the incidents call):
 

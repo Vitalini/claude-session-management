@@ -2,12 +2,18 @@ import Database from "better-sqlite3";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
+import { ticketKeyRe, ticketKeyExact, ticketKeyPattern } from "./tickets.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DB_PATH = path.join(ROOT, "data", "sessions.db");
 // config.example.json holds the defaults; config.json (written by setup.mjs,
 // untracked) overrides them key by key, so an older config keeps working when
-// new keys appear.
+// new keys appear. SM_CONFIG points at a different file — handy for testing a
+// tickets-off install without touching the real one.
+export const CONFIG_PATH = process.env.SM_CONFIG
+  ? path.resolve(process.env.SM_CONFIG)
+  : path.join(ROOT, "config.json");
+
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; }
 }
@@ -18,9 +24,36 @@ function merge(base, over) {
   }
   return out;
 }
-export const CONFIG = merge(
-  readJson(path.join(ROOT, "config.example.json")),
-  readJson(path.join(ROOT, "config.json"))
+
+// Configs written before ticket tracking became tracker-agnostic carry a `jira`
+// block. Map it onto `tickets` in memory so an un-migrated install keeps
+// working untouched — the user's file is never rewritten on load.
+//
+// `raw` is the user's own file, BEFORE the merge with config.example.json, and
+// it is what decides the questions "did the user set this?" — the example's
+// defaults are not the user's answers. So a legacy `jira` block never overrides
+// a key the user wrote under `tickets`, and an explicit `tickets.enabled: false`
+// keeps tracking off however old the rest of the file is.
+function withLegacyTickets(config, raw) {
+  const legacy = config.jira;
+  if (!legacy) return config;
+  const rawTickets = raw?.tickets ?? {};
+  const setByUser = (key) =>
+    Object.hasOwn(rawTickets, key) && String(rawTickets[key] ?? "").trim() !== "";
+  const tickets = { ...config.tickets };
+  for (const key of ["baseUrl", "relevantJql", "maxRelevant"]) {
+    if (!setByUser(key) && legacy[key] !== undefined && legacy[key] !== "") tickets[key] = legacy[key];
+  }
+  if (!Object.hasOwn(rawTickets, "enabled") && String(tickets.baseUrl ?? "").trim()) {
+    tickets.enabled = true;
+  }
+  return { ...config, tickets };
+}
+
+const RAW_CONFIG = readJson(CONFIG_PATH);
+export const CONFIG = withLegacyTickets(
+  merge(readJson(path.join(ROOT, "config.example.json")), RAW_CONFIG),
+  RAW_CONFIG
 );
 
 let db;
@@ -260,10 +293,10 @@ export function searchSessions(q, { limit = 50, status, workspace } = {}) {
       `SELECT * FROM sessions WHERE 1=1${filters()} ORDER BY updated_at DESC LIMIT @limit`
     ).all(params);
   }
-  // A bare Jira key means THAT ticket. Its own sessions come first; sessions that
-  // merely mention it (a "related tickets" line in a summary) are returned only
-  // when it has none, and tagged so callers never resume the wrong ticket's work.
-  const key = q.trim().toUpperCase().match(/^[A-Z][A-Z0-9]+-\d+$/)?.[0];
+  // A bare ticket key means THAT ticket. Its own sessions come first; sessions
+  // that merely mention it (a "related tickets" line in a summary) are returned
+  // only when it has none, and tagged so callers never resume the wrong ticket's work.
+  const key = ticketKeyExact(q);
   if (key) {
     const own = d.prepare(
       `SELECT * FROM sessions WHERE jira_key = @key${filters()} ORDER BY updated_at DESC LIMIT @limit`
@@ -310,9 +343,11 @@ export function statusCounts() {
   return getDb().prepare("SELECT status, COUNT(*) n FROM sessions GROUP BY status").all();
 }
 
-// Parse "[PS-12345][Client Name] - Title" convention (also tolerates plain titles).
+// Parse the "[PROJ-123][Client Name] - Title" convention (also tolerates plain
+// titles). The DB column is still called jira_key; renaming it would force a
+// full reindex, so only the wording around it moved to "ticket".
 export function parseTabTitle(title) {
-  const m = title?.match(/^\[([A-Z][A-Z0-9]+-\d+)\](?:\[([^\]]+)\])?\s*-?\s*(.*)$/);
-  if (!m) return { jira_key: title?.match(/\b[A-Z][A-Z0-9]+-\d{3,}\b/)?.[0] ?? null, client: null };
+  const m = title?.match(new RegExp(`^\\[(${ticketKeyPattern()})\\](?:\\[([^\\]]+)\\])?\\s*-?\\s*(.*)$`));
+  if (!m) return { jira_key: title?.match(ticketKeyRe())?.[0] ?? null, client: null };
   return { jira_key: m[1], client: m[2] ?? null };
 }

@@ -1,8 +1,11 @@
 {
   "port": 3737,
   "language": "en",
-  "jira": {
+  "tickets": {
+    "enabled": false,
     "baseUrl": "",
+    "browsePath": "/browse/",
+    "projectKeys": [],
     "relevantJql": "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
     "maxRelevant": 10
   },

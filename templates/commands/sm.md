@@ -1,6 +1,6 @@
 ---
 description: Session Management — save+exit this session (tab stays), save+close its tab, or find/restore a past one
-argument-hint: "save [name] | close [name] | <PROJ-123 or text to find> | list <query>"
+argument-hint: "save [name] | close [name] | <name or {{TICKET_EXAMPLE}} to find> | list <query>"
 allowed-tools: Bash(node:*), Bash(sqlite3:*), Bash({{CMUX_BIN}}:*)
 ---
 
@@ -14,7 +14,7 @@ Anything after `save` is the session name — use it verbatim instead of inventi
 
 1. Finish any loose end the user already approved in this conversation (an agreed ticket worklog or comment you haven't posted yet). Don't start new work.
 2. Write a short summary in {{LANG_NAME}} (2–5 sentences): what got done, key links (PR, ticket), what's left. Collect unfinished TODOs separately — both become the search index and the "what was I doing here" refresher on wake-up.
-3. Name the session: the words the user passed after `save`/`close`, verbatim. If they passed none, pick one yourself — 1–2 words, e.g. "Turing sample", "PROJ-123", "wallet passes"; never a session id, never a sentence; a ticket's key alone is the name. This is what the user types into `sm "<name>"` to come back.
+3. Name the session: the words the user passed after `save`/`close`, verbatim. If they passed none, pick one yourself — 1–2 words, e.g. "Turing sample", "wallet passes"; never a session id, never a sentence. If ticket tracking is configured and this is a ticket, its key alone ({{TICKET_EXAMPLE}}) is the name. This is what the user types into `sm "<name>"` to come back.
 4. Tell the user in one line what you're saving and that claude will exit (tab stays). Then run exactly once:
 
 ```bash
@@ -41,7 +41,7 @@ If it instead prints that the tab couldn't be identified, the session was still 
 
 ## Anything else — find and restore
 
-`$ARGUMENTS` is a ticket key, a full ticket URL, or free text (`list <query>` means: only show matches, don't open anything).
+`$ARGUMENTS` is free text — the name the session was saved under — or, if ticket tracking is configured, a ticket key or full ticket URL (`list <query>` means: only show matches, don't open anything).
 
 ```bash
 node {{PROJECT_ROOT}}/scripts/sm-resolve.mjs --list "<query>"
@@ -53,6 +53,6 @@ Show the matches (status, date, title). Then, unless the user asked only to list
 node {{PROJECT_ROOT}}/scripts/sm-resolve.mjs --new "<query>"
 ```
 
-Either way the new session starts with a kickoff phrase from `config.json → phrases`: a resumed one is asked to check what changed on its ticket, a brand-new one is pointed at the ticket (scoping or regular). That's intended, not a failure.
+If ticket tracking is configured, the new session starts with a kickoff phrase from `config.json → phrases`: a resumed one is asked to check what changed on its ticket, a brand-new one is pointed at the ticket (scoping or regular). That's intended, not a failure. Without a ticket the session just resumes.
 
-Mention once that `sm PROJ-123` in any terminal does the same thing in place, and `sm` alone opens the dashboard at http://localhost:{{PORT}}.
+Mention once that `sm "<name>"` (or `sm {{TICKET_EXAMPLE}}`) in any terminal does the same thing in place, and `sm` alone opens the dashboard at http://localhost:{{PORT}}.

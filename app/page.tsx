@@ -46,14 +46,22 @@ export default function Home() {
   const [counts, setCounts] = useState<{ status: string; n: number }[]>([]);
   const [tabs, setTabs] = useState<Tab[] | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [ticketDone, setTicketDone] = useState<Record<string, string>>({}); // jira_key -> status name (done-category only)
+  const [ticketDone, setTicketDone] = useState<Record<string, string>>({}); // ticket key -> status name (done-category only)
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  // Jira is optional — the base URL comes from config.json, and with none set
-  // the ticket keys stay plain text instead of turning into dead links.
-  const [jiraBase, setJiraBase] = useState("");
+  // Ticket tracking is optional — the tracker link prefix and the key pattern
+  // come from config.json. With tracking off there is no pattern, so no key is
+  // ever parsed out of a tab title, and stored keys stay plain text instead of
+  // turning into dead links.
+  const [ticketBase, setTicketBase] = useState("");
+  const [keyPattern, setKeyPattern] = useState<string | null>(null);
+  // Built once here and reused everywhere a tab title is scanned for a key.
+  const ticketRe = useMemo(
+    () => (keyPattern ? new RegExp(`\\b${keyPattern}\\b`) : null),
+    [keyPattern]
+  );
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusKeysRef = useRef("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -102,7 +110,11 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
-      .then((d) => setJiraBase(d.jiraBaseUrl ? `${d.jiraBaseUrl}/browse/` : ""))
+      .then((d) => {
+        const path = d.ticketBrowsePath || "/browse/";
+        setTicketBase(d.ticketsEnabled && d.ticketBaseUrl ? `${d.ticketBaseUrl}${path}` : "");
+        setKeyPattern(d.ticketsEnabled ? (d.ticketKeyPattern ?? null) : null);
+      })
       .catch(() => {});
   }, []);
 
@@ -113,8 +125,9 @@ export default function Home() {
   }, [loadActive]);
 
   // Ticket statuses for active claude tabs → suggest hibernation when done.
+  // Skipped entirely when ticket tracking is off: no pattern, no keys, no call.
   useEffect(() => {
-    const keys = [...new Set((tabs ?? []).map((t) => t.session_id && parseKey(t.title)).filter(Boolean))] as string[];
+    const keys = [...new Set((tabs ?? []).map((t) => t.session_id && parseKey(t.title, ticketRe)).filter(Boolean))] as string[];
     const sig = keys.sort().join(",");
     if (!sig || sig === statusKeysRef.current) return;
     statusKeysRef.current = sig;
@@ -129,7 +142,7 @@ export default function Home() {
         setTicketDone(done);
       })
       .catch(() => {});
-  }, [tabs]);
+  }, [tabs, ticketRe]);
 
   loadSessionsRef.current = (v: string) => loadSessions(v, group);
 
@@ -286,7 +299,7 @@ export default function Home() {
   const wakeableCount = (tabs ?? []).filter((t) => !t.session_id && t.db_session_id).length;
   // "Idle" = nothing asked for yet: search owns the screen until it is.
   const idle = !q.trim() && group === ALL;
-  const doneSuggestions = visibleTabs.filter((t) => t.session_id && ticketDone[parseKey(t.title) ?? ""]);
+  const doneSuggestions = visibleTabs.filter((t) => t.session_id && ticketDone[parseKey(t.title, ticketRe) ?? ""]);
 
   return (
     <div className="shell">
@@ -331,7 +344,7 @@ export default function Home() {
           <input
             ref={searchRef}
             className="search"
-            placeholder={group === ALL ? "Search sessions: PS-12345, client, folder, text…" : `Search in ${group}…`}
+            placeholder={group === ALL ? "Search sessions: PROJ-123, name, folder, text…" : `Search in ${group}…`}
             value={q}
             onChange={(e) => onSearch(e.target.value)}
             autoFocus
@@ -351,10 +364,10 @@ export default function Home() {
 
         {doneSuggestions.length > 0 && (
           <div className="suggest">
-            Jira-closed tickets with open sessions:{" "}
+            Closed tickets with open sessions:{" "}
             {doneSuggestions.map((t) => (
               <button key={t.surface} className="suggest-btn" onClick={() => hibernate(t)} disabled={busy === t.surface}>
-                💤 {parseKey(t.title)}
+                💤 {parseKey(t.title, ticketRe)}
               </button>
             ))}
           </div>
@@ -372,7 +385,7 @@ export default function Home() {
         {tabs && visibleTabs.length === 0 && <div className="empty">No open tabs{q ? " matching the query" : ""}.</div>}
         <div className="list">
           {visibleTabs.map((t) => {
-            const key = parseKey(t.title);
+            const key = parseKey(t.title, ticketRe);
             const done = t.session_id && key ? ticketDone[key] : undefined;
             const prompt = firstPromptById.get(t.session_id ?? t.db_session_id ?? "");
             return (
@@ -385,7 +398,7 @@ export default function Home() {
                   <span className="title">{t.title}</span>
                   {prompt && <span className="prompt">{prompt}</span>}
                 </span>
-                {done && <span className="badge due">Jira: {done} — hibernate?</span>}
+                {done && <span className="badge due">Ticket: {done} — hibernate?</span>}
                 <span className="meta">{shortPath(t.cwd ?? t.db_cwd ?? null)}</span>
                 <button className="ghost mini-act" onClick={() => renameTab(t)} title="Rename tab">✎</button>
                 {t.session_id && (
@@ -409,32 +422,34 @@ export default function Home() {
         <div className="list">
           {!tabs && <div className="empty">Loading…</div>}
           {tabs && sleeping.length === 0 && <div className="empty">No sleeping sessions{group !== ALL ? ` in ${group}` : ""}.</div>}
-          {tabs && sleeping.map((s) => <SessionItem key={s.session_id} s={s} busy={busy} resume={resume} showWs={group === ALL} jiraBase={jiraBase} />)}
+          {tabs && sleeping.map((s) => <SessionItem key={s.session_id} s={s} busy={busy} resume={resume} showWs={group === ALL} ticketBase={ticketBase} />)}
         </div>
 
         <h2>History <span className="n">{historical.length}</span></h2>
         <div className="list">
           {!tabs && <div className="empty">Loading…</div>}
           {tabs && historical.length === 0 && <div className="empty">Empty.</div>}
-          {tabs && historical.slice(0, 60).map((s) => <SessionItem key={s.session_id} s={s} busy={busy} resume={resume} showWs={group === ALL} jiraBase={jiraBase} />)}
+          {tabs && historical.slice(0, 60).map((s) => <SessionItem key={s.session_id} s={s} busy={busy} resume={resume} showWs={group === ALL} ticketBase={ticketBase} />)}
         </div>
       </main>
     </div>
   );
 }
 
-function parseKey(title: string | null): string | null {
-  return title?.match(/\b[A-Z][A-Z0-9]+-\d{3,}\b/)?.[0] ?? null;
+// The key shape is configured (tickets.projectKeys), not assumed. No pattern
+// means ticket tracking is off — then nothing in a tab title is a ticket key.
+function parseKey(title: string | null, re: RegExp | null): string | null {
+  return (re && title?.match(re)?.[0]) || null;
 }
 
-function SessionItem({ s, busy, resume, showWs, jiraBase }: {
-  s: Session; busy: string | null; resume: (id: string) => void; showWs: boolean; jiraBase: string;
+function SessionItem({ s, busy, resume, showWs, ticketBase }: {
+  s: Session; busy: string | null; resume: (id: string) => void; showWs: boolean; ticketBase: string;
 }) {
   return (
     <div className="item">
       <span className={`badge ${s.status}`}>{s.status === "saved" ? "💤 saved" : s.status}</span>
-      {s.jira_key && (jiraBase
-        ? <a className="jlink" href={jiraBase + s.jira_key} target="_blank" rel="noreferrer">{s.jira_key}</a>
+      {s.jira_key && (ticketBase
+        ? <a className="jlink" href={ticketBase + s.jira_key} target="_blank" rel="noreferrer">{s.jira_key}</a>
         : <span className="jlink">{s.jira_key}</span>
       )}
       <span className="main">

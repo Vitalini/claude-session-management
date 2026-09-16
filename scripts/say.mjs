@@ -3,7 +3,7 @@
 // cmux tab and wait for the reply. The reply is read from the session's
 // transcript, not the screen — screens wrap, truncate and repaint.
 //
-//   node say.mjs "PS-38925" "what's the status?"
+//   node say.mjs "wallet passes" "what's the status?"
 //   node say.mjs --wait 180 <session-id|query> "message"
 //   node say.mjs --list                 # which sessions are live right now
 

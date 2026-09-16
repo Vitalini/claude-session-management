@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # sm — session management quick commands (cmux + Claude Code).
 #
-#   sm PROJ-123        resume the session for a ticket IN THE CURRENT tab
+#   sm "name"          resume the session saved under that name IN THE CURRENT tab
+#                      (searches titles, summaries, folders — no tracker needed)
+#   sm PROJ-123        same by ticket key, when ticket tracking is configured
 #                      (no session yet → starts claude with the ticket kickoff phrase)
-#   sm <text>          same, but searching titles/summaries
 #   sm -n <query>      open in a NEW cmux tab in the right workspace
 #   sm -l [query]      list/search sessions in the terminal
 #   sm -s              sync: reindex sessions and live tabs
