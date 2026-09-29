@@ -55,6 +55,13 @@ case "$action" in
     sid="${rest%%$'\t'*}"
     prompt="${rest#*$'\t'}"
     [ "$prompt" = "$sid" ] && prompt=""
+    # The resolver already guarantees an existing folder; this is the belt for
+    # the braces. `claude --resume` finds the transcript from any directory, so
+    # a bad path must never cost the session.
+    if [ ! -d "$dir" ]; then
+      echo "sm: folder $dir no longer exists — starting in $HOME instead" >&2
+      dir="$HOME"
+    fi
     cd "$dir"
     if [ -n "$prompt" ]; then
       exec claude $CLAUDE_FLAGS --resume "$sid" "$prompt"

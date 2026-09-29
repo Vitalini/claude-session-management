@@ -115,6 +115,7 @@ If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw
 | `defaultWorkspace` | cmux workspace for new session tabs; empty creates one named `Sessions` |
 | `scopingWorkspace` | Workspace for scoping tickets; empty falls back to `defaultWorkspace` |
 | `claudeProjectsDir` | Where Claude Code keeps transcripts (`~/.claude/projects`) |
+| `pathAliases` | `{"/old/prefix": "/new/prefix"}` — where folders went after you moved them. Applied longest prefix first to a session's saved folder, and only when that folder is gone. Empty by default; see [Moved folders](#moved-folders) |
 | `watchdog.enabled` | Turn the watchdog off without unloading it |
 | `watchdog.intervalSec` | Scan interval |
 | `watchdog.warnAtPercent` | Warn when the 5-hour usage window passes this |
@@ -122,6 +123,24 @@ If you run [OpenClaw](https://github.com/openclaw/openclaw), `templates/openclaw
 | `watchdog.notifyKinds` | Which incidents alert you: `limit`, `crash`, `warning` |
 
 Secrets live in `.env.local` (never committed): `TICKET_EMAIL`, `TICKET_API_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`. `SM_CONFIG` points the scripts at a different config file when you want to try settings without touching your own.
+
+### Moved folders
+
+Every session remembers the folder it ran in. Move that folder and the saved path points at nothing — but `claude --resume <id>` finds a transcript from any working directory, so a missing folder is never fatal. Resuming one starts in the best directory available and tells you so: the configured alias if there is one, otherwise the nearest folder above the old path that still exists, otherwise your home directory.
+
+Set `pathAliases` when you know where a tree went, so sessions land back in the right place:
+
+```json
+"pathAliases": { "/Users/you/old/work": "/Users/you/new/work" }
+```
+
+That is enough — nothing needs rewriting. If you also want the database tidy:
+
+```bash
+node scripts/index-sessions.mjs --remap-paths
+```
+
+It rewrites only the rows an alias can translate into a folder that exists, prints a before/after count, and leaves everything else untouched. It never runs on its own.
 
 ## Uninstall
 

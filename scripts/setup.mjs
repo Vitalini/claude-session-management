@@ -345,6 +345,9 @@ const config = {
   defaultWorkspace: workspace,
   scopingWorkspace,
   claudeProjectsDir: existing.claudeProjectsDir ?? example.claudeProjectsDir,
+  // Left empty on install: it only matters after you move a folder tree, and
+  // guessing a mapping is worse than the nearest-existing-folder fallback.
+  pathAliases: existing.pathAliases ?? example.pathAliases,
   watchdog: { ...example.watchdog, ...(existing.watchdog ?? {}), nudge: preset.nudge },
 };
 write(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");

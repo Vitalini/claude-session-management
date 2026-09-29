@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Index Claude sessions into SQLite: backfill from ~/.claude/projects + live scan of cmux tabs.
 // Usage: node index-sessions.mjs [--backfill] [--live] (default: both)
+//        node index-sessions.mjs --remap-paths   (opt-in: rewrite moved folders)
 
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { getDb, upsertSession, statusCounts, parseTabTitle, searchSessions, CONFIG } from "./db.mjs";
 import { ticketKeyRe } from "./tickets.mjs";
 import { cmux, claudeProcessesBySurface } from "./cmux-lib.mjs";
+import { applyAliases, dirExists } from "./paths.mjs";
 
 const PROJECTS_DIR = CONFIG.claudeProjectsDir.replace(/^~/, os.homedir());
 // Which prefixes count as a ticket comes from config.json → tickets.projectKeys.
@@ -288,10 +290,45 @@ export function liveScan() {
   return { tabs, workspaces };
 }
 
+// ---------- Opt-in path repair ----------
+
+// Move a folder tree and every session indexed under the old path resumes into
+// nothing. resolveCwd() already recovers at resume time, so this is pure
+// hygiene: it rewrites the rows that config.json → pathAliases can translate
+// with confidence, and leaves the rest alone. A row with no alias is NOT
+// guessed at — the ancestor fallback handles it, and a wrong cwd written into
+// the DB is harder to undo than a missing one. Never runs automatically.
+export function remapPaths() {
+  const db = getDb();
+  const rows = db.prepare("SELECT session_id, cwd FROM sessions WHERE cwd IS NOT NULL AND cwd != ''").all();
+  const missing = rows.filter((r) => !dirExists(r.cwd));
+  const plan = [];
+  for (const r of missing) {
+    const mapped = applyAliases(r.cwd);
+    if (mapped && dirExists(mapped) && mapped !== r.cwd) plan.push([mapped, r.session_id]);
+  }
+  const upd = db.prepare("UPDATE sessions SET cwd = ? WHERE session_id = ?");
+  db.transaction((list) => { for (const args of list) upd.run(...args); })(plan);
+  return { total: rows.length, missingBefore: missing.length, rewritten: plan.length };
+}
+
 // ---------- Main (only when run directly — the watchdog imports liveScan) ----------
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const args = process.argv.slice(2);
+
+  if (args.includes("--remap-paths")) {
+    const { total, missingBefore, rewritten } = remapPaths();
+    const aliases = Object.keys(CONFIG.pathAliases ?? {}).length;
+    console.log(`remap-paths: ${aliases} alias(es) configured`);
+    console.log(`  before: ${missingBefore} of ${total} sessions point at a folder that is gone`);
+    console.log(`  after:  ${missingBefore - rewritten} still gone — ${rewritten} rewritten`);
+    if (missingBefore > rewritten) {
+      console.log("  (no alias covers the rest — they resolve to the nearest existing folder at resume time)");
+    }
+    process.exit(0);
+  }
+
   const json = args.includes("--json");
   const doBackfill = args.includes("--backfill") || !args.some((a) => a !== "--json");
   const doLive = args.includes("--live") || !args.some((a) => a !== "--json");

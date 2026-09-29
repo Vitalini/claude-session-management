@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { CONFIG, getSession, upsertSession, parseTabTitle } from "./db.mjs";
 import { detectCmuxBin } from "./cmux-detect.mjs";
+import { resolveCwd } from "./paths.mjs";
 
 export { detectCmuxBin };
 
@@ -67,10 +68,14 @@ export function openTab({ workspaceName, cwd, command, title, focus = true }) {
 export function resumeSessionTab(sessionId, { focus = true, prompt = "" } = {}) {
   const row = getSession(sessionId);
   if (!row) throw new Error(`session not found in DB: ${sessionId}`);
-  if (!row.cwd) throw new Error(`session has no cwd recorded: ${sessionId}`);
+  // The saved folder may be gone (a moved tree, a deleted worktree). That is not
+  // fatal — --resume finds the transcript from anywhere — so start in the best
+  // directory we can name rather than opening a tab that dies on `cd`.
+  const { dir, note } = resolveCwd(row.cwd);
+  if (note) console.error(note);
   return openTab({
     workspaceName: row.workspace,
-    cwd: row.cwd,
+    cwd: dir,
     command: `claude ${CONFIG.claudeFlags} --resume ${shq(sessionId)}` + (prompt ? ` ${shq(prompt)}` : ""),
     title: row.title,
     focus,
@@ -206,7 +211,9 @@ export function hibernateTab({ surface, workspace, sessionIdHint, cwdHint }) {
 // Wake a session inside an ALREADY-OPEN tab (an idle shell whose claude exited):
 // types `cd <cwd> && claude --resume <id>` into that surface and focuses it.
 export function wakeInTab({ surface, workspace, sessionId, cwd }) {
-  const full = `cd ${shq(cwd)} && claude ${CONFIG.claudeFlags} --resume ${shq(sessionId)}`;
+  const { dir, note } = resolveCwd(cwd);
+  if (note) console.error(note);
+  const full = `cd ${shq(dir)} && claude ${CONFIG.claudeFlags} --resume ${shq(sessionId)}`;
   cmux("send", "--surface", surface, "--workspace", workspace, full);
   cmux("send-key", "--surface", surface, "--workspace", workspace, "enter");
   focusTab({ workspace, surface });

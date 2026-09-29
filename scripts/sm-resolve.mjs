@@ -13,6 +13,7 @@ import path from "node:path";
 import { searchSessions, getSession, CONFIG } from "./db.mjs";
 import { ticketsEnabled, ticketBaseUrl, bareKeyExact, ticketUrl, keyFromUrl } from "./tickets.mjs";
 import { resumeSessionTab, openTab, focusTab } from "./cmux-lib.mjs";
+import { resolveCwd } from "./paths.mjs";
 import { liveScan } from "./index-sessions.mjs";
 
 const args = process.argv.slice(2);
@@ -124,10 +125,15 @@ if (hit?.cwd) {
   const prompt = key ? CONFIG.phrases.updates.replace("{url}", ticketRef(key)) : "";
   if (prompt) info(`Kickoff: ${prompt}`);
   if (mode === "new") {
+    // resumeSessionTab resolves the folder itself and prints its own warning.
     const r = resumeSessionTab(hit.session_id, { focus: true, prompt });
     console.log(`OPENED\t${r.workspace}\t${r.surface ?? ""}`);
   } else {
-    console.log(`RESUME\t${hit.cwd}\t${hit.session_id}\t${prompt}`);
+    // The saved folder may have moved or been deleted. Hand `sm` a directory
+    // that exists and warn on stderr, so the machine-readable line stays clean.
+    const { dir, note } = resolveCwd(hit.cwd);
+    if (note) info(note);
+    console.log(`RESUME\t${dir}\t${hit.session_id}\t${prompt}`);
   }
   process.exit(0);
 }

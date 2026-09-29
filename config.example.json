@@ -20,6 +20,7 @@
   "defaultWorkspace": "",
   "scopingWorkspace": "",
   "claudeProjectsDir": "~/.claude/projects",
+  "pathAliases": {},
   "watchdog": {
     "enabled": true,
     "intervalSec": 60,

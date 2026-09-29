@@ -17,6 +17,7 @@ export const CONFIG: {
   defaultWorkspace: string;
   scopingWorkspace: string;
   claudeProjectsDir: string;
+  pathAliases: Record<string, string>;
 };
 
 export interface SessionRow {
