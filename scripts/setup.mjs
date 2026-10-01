@@ -404,6 +404,15 @@ for (const name of ["sm", "sms", "smsc"]) {
 }
 write(path.join(HOME, ".claude", "skills", "session-management", "SKILL.md"), render("skill/SKILL.md"));
 
+// The tab-naming rules that config.tabRule points at. An existing file is kept:
+// it may be the user's own edited or translated version.
+const tabNamingFile = path.join(HOME, ".claude", "tab-naming.md");
+if (fs.existsSync(tabNamingFile)) {
+  note(`keep ${tabNamingFile} (already present — yours to edit)`);
+} else {
+  write(tabNamingFile, fs.readFileSync(path.join(TEMPLATES, "tab-naming.md"), "utf8"));
+}
+
 // ---------- sm symlink ----------
 
 const smTarget = path.join(ROOT, "scripts", "sm");
@@ -511,6 +520,7 @@ const lines = [
   `  CLI:         ${smLink} → scripts/sm   (try: sm -h)`,
   `  commands:    ~/.claude/commands/{sm,sms,smsc}.md`,
   `  skill:       ~/.claude/skills/session-management/SKILL.md`,
+  `  tab naming:  ~/.claude/tab-naming.md (config.tabRule points at it)`,
   withLaunchd
     ? `  services:    ${LABEL_DASHBOARD}, ${LABEL_WATCHDOG} (launchd, start at login)`
     : "  services:    not installed (--no-launchd)",
@@ -525,6 +535,8 @@ const lines = [
   trackTickets
     ? "  · Ticket lists in the dashboard: add TICKET_EMAIL and TICKET_API_TOKEN to .env.local"
     : "  · Ticket tracking is off; add a base URL to config.json → tickets to switch it on",
+  "  · Tab naming in every session, not only ones opened via sm (optional): add this line to ~/.claude/CLAUDE.md:",
+  "      When a session starts on a ticket, rename this cmux tab per ~/.claude/tab-naming.md as the first action — silently, never mention it.",
   "  · OpenClaw (optional): copy templates/openclaw/SKILL.md into ~/.openclaw/workspace/skills/personal/sessions/ and use templates/openclaw/group-prompt.md for the Telegram group",
 ];
 console.log(lines.join("\n"));

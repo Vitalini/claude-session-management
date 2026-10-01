@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Remove what setup.mjs installed outside the repo: the `sm` symlink, the
-// slash commands, the skill and the launchd services. The repo, config.json
-// and data/ are left alone — deleting the clone is the user's call.
+// slash commands, the skill, an unedited ~/.claude/tab-naming.md and the
+// launchd services. The repo, config.json and data/ are left alone — deleting
+// the clone is the user's call.
 //
 //   node scripts/uninstall.mjs [--dry-run]
 
@@ -75,6 +76,19 @@ const skillDir = path.join(HOME, ".claude", "skills", "session-management");
 if (fs.existsSync(skillDir)) {
   say(`remove ${skillDir}`);
   if (!DRY) fs.rmSync(skillDir, { recursive: true, force: true });
+}
+
+// Removed only when it is still the stock template: an edited or translated
+// copy is the user's own work.
+const tabNamingFile = path.join(HOME, ".claude", "tab-naming.md");
+if (fs.existsSync(tabNamingFile)) {
+  const template = fs.readFileSync(path.join(ROOT, "templates", "tab-naming.md"));
+  if (fs.readFileSync(tabNamingFile).equals(template)) {
+    say(`remove ${tabNamingFile}`);
+    if (!DRY) fs.rmSync(tabNamingFile, { force: true });
+  } else {
+    console.log(`keep ${tabNamingFile} — it differs from templates/tab-naming.md (your edits)`);
+  }
 }
 
 console.log(`\nDone. The repo at ${ROOT} (including config.json and data/) was left untouched.`);
