@@ -4,7 +4,7 @@ Do it **silently**, as your first action, before you answer. Never announce, con
 
 ## When
 
-When the session starts on a ticket: the first message is a kickoff phrase with a ticket key or link — "look at the task PROJ-123", "check what changed on …", or the same in any language the tool is set to — or the key was opened via `sm`. Not when a ticket comes up in passing during other work.
+When the session starts on a ticket: the first message is a kickoff phrase ("look at the task PROJ-123", "look at the scoping …", "check what changed on …"), or the key was opened via `sm`. Not when a ticket comes up in passing during other work.
 
 ## Format
 
