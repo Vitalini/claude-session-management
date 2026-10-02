@@ -8,6 +8,10 @@
 // one line: the full naming rules live in ~/.claude/tab-naming.md (installed
 // from templates/tab-naming.md), so the session's first message is not flooded.
 
+// An instruction to Claude, not the user's own words — English in every
+// preset; only the phrases above are localized.
+const TAB_RULE = "Name this tab per ~/.claude/tab-naming.md — silently, do not mention it in your reply.";
+
 export const LANGS = {
   en: {
     summaryLanguage: "English",
@@ -17,7 +21,7 @@ export const LANGS = {
       updates: "check what changed on {url}",
     },
     nudge: "Continue from where you left off.",
-    tabRule: "Name this tab per ~/.claude/tab-naming.md — silently, do not mention it in your reply.",
+    tabRule: TAB_RULE,
   },
   ru: {
     summaryLanguage: "Russian",
@@ -27,7 +31,7 @@ export const LANGS = {
       updates: "посмотри обновления {url}",
     },
     nudge: "Продолжай с того места, где остановился.",
-    tabRule: "Таб назови по ~/.claude/tab-naming.md — молча, не упоминай в ответе.",
+    tabRule: TAB_RULE,
   },
   uk: {
     summaryLanguage: "Ukrainian",
@@ -37,7 +41,7 @@ export const LANGS = {
       updates: "подивись оновлення {url}",
     },
     nudge: "Продовжуй з того місця, де зупинився.",
-    tabRule: "Таб назви за ~/.claude/tab-naming.md — мовчки, не згадуй у відповіді.",
+    tabRule: TAB_RULE,
   },
 };
 
